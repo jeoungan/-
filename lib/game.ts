@@ -8,12 +8,21 @@ export type PlaceId =
   | 'shuttle';
 export type Companion = 'seoyun' | 'minjae' | 'doha';
 export type Route = 'shuttle' | 'gate' | 'radio';
+export type JournalEntry = {
+  at: number;
+  text: string;
+  action?: string;
+  place?: PlaceId;
+  changes?: string[];
+};
 export type GameState = {
   version: 1;
   mode: 'title' | 'playing' | 'ending';
   x: number;
   y: number;
   elapsed: number;
+  worldTime: number;
+  exposure: number;
   health: number;
   focus: number;
   power: number;
@@ -23,7 +32,7 @@ export type GameState = {
   trust: Record<Companion, number>;
   flags: string[];
   visited: PlaceId[];
-  log: { at: number; text: string }[];
+  log: JournalEntry[];
   ending: string | null;
   route: Route | null;
   lastEvent: string;
@@ -212,6 +221,8 @@ export const initialState = (): GameState => ({
   x: 500,
   y: 365,
   elapsed: 0,
+  worldTime: 0,
+  exposure: 0,
   health: 100,
   focus: 100,
   power: 3,
@@ -868,6 +879,59 @@ export function choiceDisabled(s: GameState, c: Choice): string | undefined {
     return `시간 부족 · ${c.minutes}분 필요`;
   return undefined;
 }
+export function placeProgress(s: GameState, id: PlaceId) {
+  const event = eventFor(s, id);
+  const departures = event.choices.filter((choice) => choice.route);
+  if (
+    id === 'radio' &&
+    event.choices.some(
+      (choice) => choice.id === 'extra-truth' && !choiceDisabled(s, choice),
+    )
+  )
+    return { kind: 'available', label: '추가 방송 가능' };
+  if (departures.some((choice) => !choiceDisabled(s, choice)))
+    return { kind: 'ready', label: '출발 가능' };
+  if (departures.length) return { kind: 'blocked', label: '출발 조건 부족' };
+  if (id === 'fountain' && has(s, 'cache') && event.choices.length)
+    return { kind: 'available', label: '대화 가능' };
+  if (!event.choices.length)
+    return {
+      kind: 'done',
+      label: id === 'fountain' ? '휴식 광장' : '조사 완료',
+    };
+  if (s.visited.includes(id)) return { kind: 'available', label: '추가 조사' };
+  return { kind: 'new', label: '미조사' };
+}
+export function choiceChanges(
+  before: GameState,
+  after: GameState,
+  choice: Choice,
+) {
+  const changes = [`시간 −${choice.minutes}분`];
+  for (const [key, label] of [
+    ['health', '체력'],
+    ['power', '전력'],
+    ['alert', '경계'],
+  ] as const) {
+    const delta = after[key] - before[key];
+    if (delta)
+      changes.push(
+        `${label} ${delta > 0 ? '+' : '−'}${Number(Math.abs(delta).toFixed(1))}`,
+      );
+    else if (choice[key]) changes.push(`${label} 변화 없음 (${before[key]})`);
+  }
+  for (const item of after.items.filter((item) => !before.items.includes(item)))
+    changes.push(`${ITEM_NAMES[item]} 확보`);
+  for (const person of after.companions.filter(
+    (person) => !before.companions.includes(person),
+  ))
+    changes.push(`${PEOPLE[person].name} 동행`);
+  for (const person of Object.keys(PEOPLE) as Companion[]) {
+    const delta = after.trust[person] - before.trust[person];
+    if (delta) changes.push(`${PEOPLE[person].name} 신뢰 +${delta}`);
+  }
+  return changes;
+}
 export function choose(
   s: GameState,
   place: PlaceId,
@@ -889,12 +953,20 @@ export function choose(
     trust: { ...s.trust },
     visited: [...new Set([...s.visited, place])],
     lastEvent: ch.result,
-    log: [...s.log, { at: s.elapsed + ch.minutes * 60, text: ch.result }].slice(
-      -70,
-    ),
+    log: s.log,
   };
   for (const p of Object.keys(ch.trust ?? {}) as Companion[])
     n.trust[p] = Math.min(3, n.trust[p] + (ch.trust?.[p] ?? 0));
+  n.log = [
+    ...s.log,
+    {
+      at: n.elapsed,
+      text: ch.result,
+      action: ch.label,
+      place,
+      changes: choiceChanges(s, n, ch),
+    },
+  ].slice(-70);
   if (ch.route) {
     n.route = ch.route;
     n.mode = 'ending';
@@ -980,6 +1052,37 @@ export function patrols(t: number) {
     { x: 660 + Math.sin(t * 0.13 + 2) * 100, y: 420 + Math.cos(t * 0.12) * 52 },
   ];
 }
+export const EXPOSURE_GRACE = 0.8;
+export const patrolRadius = (alert: number) => 22 + alert * 0.16;
+export function patrolThreat(s: GameState) {
+  const closest = patrols(s.worldTime)
+    .map((p) => ({
+      ...p,
+      gap: Math.hypot(s.x - p.x, s.y - p.y) - patrolRadius(s.alert),
+    }))
+    .sort((a, b) => a.gap - b.gap)[0];
+  const direction =
+    Math.abs(closest.x - s.x) > Math.abs(closest.y - s.y)
+      ? closest.x < s.x
+        ? '왼쪽'
+        : '오른쪽'
+      : closest.y < s.y
+        ? '위쪽'
+        : '아래쪽';
+  const level =
+    closest.gap < 0 ? 'exposed' : closest.gap < 42 ? 'near' : 'clear';
+  return {
+    level,
+    direction,
+    gap: closest.gap,
+    label:
+      level === 'exposed'
+        ? '순찰에 노출 · 원 밖으로 벗어나세요'
+        : level === 'near'
+          ? `${direction}에서 순찰 접근 · 경로를 바꾸세요`
+          : '주변에 가까운 순찰 없음',
+  };
+}
 export function tick(
   s: GameState,
   dt: number,
@@ -989,7 +1092,8 @@ export function tick(
   if (s.mode !== 'playing') return s;
   const n = {
     ...s,
-    elapsed: s.elapsed + dt * 3,
+    elapsed: Math.min(1800, s.elapsed + dt * 3),
+    worldTime: Math.min(600, s.worldTime + dt),
     focus: Math.max(
       0,
       Math.min(100, s.focus + dt * (moving && running ? -16 : 10)),
@@ -1000,14 +1104,26 @@ export function tick(
     ),
     damageCooldown: Math.max(0, s.damageCooldown - dt),
   };
-  const danger = patrols(n.elapsed / 3).some(
-    (p) => Math.hypot(s.x - p.x, s.y - p.y) < 22 + n.alert * 0.16,
-  );
-  if (danger && n.damageCooldown <= 0) {
+  const danger = patrolThreat(n).level === 'exposed';
+  n.exposure = danger ? Math.min(EXPOSURE_GRACE, s.exposure + dt) : 0;
+  if (danger && n.exposure >= EXPOSURE_GRACE && n.damageCooldown <= 0) {
+    const damage = Math.min(7, n.health);
     n.health = Math.max(0, n.health - 7);
     n.damageCooldown = 2;
     n.alert = Math.min(100, n.alert + 8);
-    n.lastEvent = '순찰등에 노출됐다. 체력 −7. 주황색 원에서 벗어나세요.';
+    n.lastEvent = `순찰등에 노출됐다. 체력 −${damage}. 주황색 원에서 벗어나세요.`;
+    n.log = [
+      ...s.log,
+      {
+        at: n.elapsed,
+        text: n.lastEvent,
+        action: '순찰에 노출',
+        changes: [
+          `체력 −${damage}`,
+          `경계 +${Number((n.alert - s.alert).toFixed(1))}`,
+        ],
+      },
+    ].slice(-70);
   }
   if (n.health <= 0) {
     n.mode = 'ending';
@@ -1068,7 +1184,14 @@ export function validateSave(raw: unknown): GameState | null {
         l.text.length < 2000 &&
         Number.isFinite(l.at) &&
         l.at >= 0 &&
-        l.at <= 1800,
+        l.at <= 1800 &&
+        (l.action === undefined ||
+          (typeof l.action === 'string' && l.action.length < 200)) &&
+        (l.place === undefined || PLACES.some((p) => p.id === l.place)) &&
+        (l.changes === undefined ||
+          (Array.isArray(l.changes) &&
+            l.changes.length < 25 &&
+            l.changes.every((v) => typeof v === 'string' && v.length < 200))),
     )
   )
     return null;
@@ -1107,5 +1230,17 @@ export function validateSave(raw: unknown): GameState | null {
       s.elapsed >= 1800)
   )
     return null;
-  return { ...initialState(), ...s };
+  // Version 1 saves predate the separate patrol clock and exposure warning.
+  const worldTime = s.worldTime === undefined ? s.elapsed / 3 : s.worldTime;
+  const exposure = s.exposure === undefined ? 0 : s.exposure;
+  if (
+    !Number.isFinite(worldTime) ||
+    worldTime < 0 ||
+    worldTime > 600 ||
+    !Number.isFinite(exposure) ||
+    exposure < 0 ||
+    exposure > EXPOSURE_GRACE
+  )
+    return null;
+  return { ...initialState(), ...s, worldTime, exposure };
 }

@@ -9,6 +9,8 @@ import {
   validateSave,
   tick,
   patrols,
+  patrolThreat,
+  placeProgress,
   pathTo,
   PLACES,
   walkable,
@@ -266,3 +268,116 @@ test('corrupt saves cannot crash UI or violate gameplay invariants', () => {
 });
 test('evidence always counts distinct sources', () =>
   assert.equal(evidence({ ...fresh(), items: ['admin', 'admin'] }), 1));
+
+test('location status tracks remaining investigation, returning conversations and usable departures', () => {
+  let s = actions([['library', 'power']]);
+  assert.equal(placeProgress(s, 'library').label, '추가 조사');
+  s = actions([['library', 'photo']], s);
+  assert.equal(placeProgress(s, 'library').label, '조사 완료');
+  s = actions([['fountain', 'cell']], s);
+  assert.equal(placeProgress(s, 'fountain').label, '휴식 광장');
+  s = actions([['engineering', 'cell']], s);
+  assert.equal(placeProgress(s, 'fountain').label, '대화 가능');
+  s = actions([['shuttle', 'doha']], s);
+  assert.equal(placeProgress(s, 'shuttle').label, '출발 가능');
+  assert.equal(
+    placeProgress(
+      { ...s, health: 1, elapsed: 1740, flags: ['gate-open'] },
+      'gate',
+    ).label,
+    '출발 조건 부족',
+  );
+});
+
+test('new evidence highlights an available additional broadcast after a rescue signal', () => {
+  const s = actions([
+    ['radio', 'speak'],
+    ['radio', 'rescue'],
+    ['library', 'power'],
+    ['library', 'photo'],
+    ['clinic', 'open'],
+    ['clinic', 'record'],
+  ]);
+  assert.equal(placeProgress(s, 'radio').label, '추가 방송 가능');
+});
+
+test('choice receipts record actual capped changes and preserve the patrol clock', () => {
+  const s = actions([['fountain', 'bandage']]);
+  assert.deepEqual(s.log.at(-1).changes, [
+    '시간 −2분',
+    '체력 변화 없음 (100)',
+    '경계 −12',
+  ]);
+  assert.equal(s.log.at(-1).place, 'fountain');
+  assert.ok(s.log.at(-1).action);
+  assert.equal(s.worldTime, 0);
+  const power = actions([['fountain', 'cell']], { ...fresh(), power: 8 });
+  assert.deepEqual(power.log.at(-1).changes, ['시간 −1분', '전력 +1']);
+});
+
+test('brief patrol contact warns without damage, escape resets exposure, and lingering causes damage', () => {
+  const p = patrols(0)[0];
+  let s = { ...fresh(), ...p };
+  assert.equal(patrolThreat(s).level, 'exposed');
+  s = tick(s, 0.5, false, false);
+  assert.equal(s.health, 100);
+  assert.equal(s.exposure, 0.5);
+  const out = tick({ ...s, x: 100, y: 300 }, 0.05, true, false);
+  assert.equal(out.exposure, 0);
+  const reenter = tick(
+    { ...out, ...patrols(out.worldTime)[0] },
+    0.5,
+    false,
+    false,
+  );
+  assert.equal(reenter.health, 100);
+  assert.equal(reenter.exposure, 0.5);
+  const hit = tick(reenter, 0.31, false, false);
+  assert.equal(hit.health, 93);
+  assert.equal(hit.log.at(-1).action, '순찰에 노출');
+  assert.equal(tick(hit, 0.05, false, false).health, 93);
+});
+
+test('old saves migrate without losing history and new warning data is validated', () => {
+  const {
+    worldTime: _worldTime,
+    exposure: _exposure,
+    ...old
+  } = {
+    ...fresh(),
+    elapsed: 900,
+    log: [{ at: 0, text: '이전 기록' }],
+  };
+  const restored = validateSave(old);
+  assert.equal(restored.worldTime, 300);
+  assert.equal(restored.exposure, 0);
+  assert.deepEqual(restored.log, old.log);
+  for (const extra of [
+    { worldTime: Infinity },
+    { exposure: 1 },
+    { log: [{ at: 1, text: '기록', changes: [{}] }] },
+    { log: [{ at: 1, text: '기록', place: 'missing' }] },
+  ])
+    assert.equal(validateSave({ ...fresh(), ...extra }), null);
+});
+
+test('simultaneous patrol death and deadline, including migrated saves, remain loadable', () => {
+  const time = 1799.99 / 3;
+  const before = {
+    ...fresh(),
+    ...patrols(time)[0],
+    elapsed: 1799.99,
+    worldTime: time,
+    exposure: 0.8,
+    health: 1,
+  };
+  assert.ok(validateSave(before));
+  const after = tick(before, 0.02, false, false);
+  assert.equal(after.ending, 'health');
+  assert.equal(after.elapsed, 1800);
+  assert.equal(after.worldTime, 600);
+  assert.ok(validateSave(JSON.parse(JSON.stringify(after))));
+  const timeout = tick({ ...before, x: 100, y: 300 }, 0.02, false, false);
+  assert.equal(timeout.ending, 'timeout');
+  assert.ok(validateSave(timeout));
+});

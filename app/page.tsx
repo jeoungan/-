@@ -53,6 +53,10 @@ import {
   walkable,
   pathTo,
   patrols,
+  patrolRadius,
+  patrolThreat,
+  EXPOSURE_GRACE,
+  placeProgress,
   tick,
   validateSave,
   type GameState,
@@ -130,6 +134,7 @@ export default function Home() {
   }, []);
   const openPlace = useCallback(
     (id: PlaceId) => {
+      if (ref.current.mode !== 'playing') return;
       placeRef.current = id;
       setPlace(id);
       path.current = [];
@@ -267,7 +272,7 @@ export default function Home() {
         k.has('arrowleft') ||
         k.has('arrowright');
       if (keyboard) {
-        if (destination.current) setTravel('');
+        if (path.current.length || destination.current) setTravel('');
         path.current = [];
         destination.current = null;
         dx =
@@ -282,6 +287,7 @@ export default function Home() {
         dy = p.y - s.y;
         if (Math.hypot(dx, dy) < 5) {
           path.current.shift();
+          if (!path.current.length && !destination.current) setTravel('');
           dx = 0;
           dy = 0;
         }
@@ -300,6 +306,14 @@ export default function Home() {
         s = { ...s, x, y };
       }
       ref.current = tick(s, dt, moving, running);
+      if (ref.current.mode === 'ending') {
+        path.current = [];
+        destination.current = null;
+        setTravel('');
+        openPanel(null);
+        update(ref.current);
+        return;
+      }
       if (destination.current && !path.current.length) {
         const dest = destination.current;
         destination.current = null;
@@ -314,14 +328,14 @@ export default function Home() {
           openPlace(dest);
         }
       }
-      if (ref.current.mode === 'ending') update(ref.current);
     },
-    [openPlace, update],
+    [openPlace, openPanel, update],
   );
   useEffect(() => {
     let frame = 0,
       last = 0,
       lastUI = 0;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const draw = (now: number) => {
       const dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
       last = now;
@@ -331,9 +345,9 @@ export default function Home() {
       if (ctx) {
         ctx.clearRect(0, 0, 1000, 667);
         if (s.mode !== 'title') {
-          const t = s.elapsed / 3;
+          const t = s.worldTime;
           for (const p of patrols(t)) {
-            const radius = 22 + s.alert * 0.16;
+            const radius = patrolRadius(s.alert);
             ctx.beginPath();
             ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
             ctx.fillStyle = '#db9b6030';
@@ -367,6 +381,19 @@ export default function Home() {
           ctx.strokeStyle = '#a7ddca88';
           ctx.lineWidth = 1;
           ctx.stroke();
+          if (s.exposure > 0) {
+            ctx.beginPath();
+            ctx.arc(
+              s.x,
+              s.y,
+              24,
+              -Math.PI / 2,
+              -Math.PI / 2 + (Math.PI * 2 * s.exposure) / EXPOSURE_GRACE,
+            );
+            ctx.strokeStyle = '#ffc78e';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+          }
           ctx.beginPath();
           ctx.arc(s.x, s.y, 7, 0, Math.PI * 2);
           ctx.fillStyle = s.damageCooldown > 1.5 ? '#ed998b' : '#d9fff0';
@@ -385,7 +412,7 @@ export default function Home() {
             ctx.fillStyle = PEOPLE[p].color;
             ctx.fill();
           });
-          if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          if (!reducedMotion.matches) {
             ctx.strokeStyle = '#c5e8ed22';
             ctx.lineWidth = 1;
             for (let i = 0; i < 60; i++) {
@@ -407,11 +434,17 @@ export default function Home() {
         lastUI = now;
         setState({ ...ref.current });
       }
-      frame = requestAnimationFrame(draw);
+      if (
+        ref.current.mode === 'playing' &&
+        !panelRef.current &&
+        focused.current &&
+        !document.hidden
+      )
+        frame = requestAnimationFrame(draw);
     };
     frame = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frame);
-  }, [step]);
+  }, [step, state.mode, panel]);
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -478,15 +511,18 @@ export default function Home() {
       focused.current = true;
       if (soundRef.current) void audioRef.current?.resume();
     };
+    const visibility = () => (document.hidden ? blur() : focus());
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
     window.addEventListener('blur', blur);
     window.addEventListener('focus', focus);
+    document.addEventListener('visibilitychange', visibility);
     return () => {
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
       window.removeEventListener('blur', blur);
       window.removeEventListener('focus', focus);
+      document.removeEventListener('visibilitychange', visibility);
     };
   }, [interact, openPanel]);
   useEffect(() => {
@@ -511,6 +547,14 @@ export default function Home() {
             ? eventFor(ref.current, placeRef.current).id
             : null,
         ending: ref.current.ending,
+        patrol: {
+          ...patrolThreat(ref.current),
+          exposure: ref.current.exposure,
+        },
+        locations: PLACES.map((loc) => ({
+          id: loc.id,
+          ...placeProgress(ref.current, loc.id),
+        })),
       });
     w.advanceTime = (ms) => {
       const n = Math.max(0, Math.min(300000, ms));
@@ -621,6 +665,10 @@ export default function Home() {
   );
   const p = PLACES.find((v) => v.id === place)!;
   const near = nearestPlace(state);
+  const threat = patrolThreat(state);
+  const progress = Object.fromEntries(
+    PLACES.map((loc) => [loc.id, placeProgress(state, loc.id)]),
+  ) as Record<PlaceId, ReturnType<typeof placeProgress>>;
   const story = eventFor(state, place);
   const ending = state.ending ? ENDINGS[state.ending] : null;
   const remaining = timeText(1800 - state.elapsed).split(':');
@@ -813,14 +861,15 @@ export default function Home() {
                   className={
                     'map-pin pin-' +
                     loc.id +
-                    (state.visited.includes(loc.id) ? ' visited' : '') +
+                    ' progress-' +
+                    progress[loc.id].kind +
                     (near?.id === loc.id ? ' nearby' : '')
                   }
                   style={{
                     left: `${loc.x / 10}%`,
                     top: `${(loc.y / 667) * 100}%`,
                   }}
-                  aria-label={`${loc.name}으로 이동하고 조사`}
+                  aria-label={`${loc.name} · ${progress[loc.id].label} · 이동하고 조사`}
                   disabled={!playing || !!panel}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -828,13 +877,16 @@ export default function Home() {
                   }}
                 >
                   <span className="pin-symbol">
-                    {state.visited.includes(loc.id) ? (
+                    {progress[loc.id].kind === 'done' ? (
                       <Check size={10} />
                     ) : (
                       loc.number
                     )}
                   </span>
                   <span>{loc.name}</span>
+                  <small className="pin-progress">
+                    {progress[loc.id].label}
+                  </small>
                 </button>
               ))}
             {state.mode === 'title' && (
@@ -916,10 +968,27 @@ export default function Home() {
             {playing && (
               <div className="map-legend">
                 <span className="player-dot" /> 나{' '}
-                <span className="patrol-dot" /> 순찰 · 원 안에 머물면 피해
+                <span className="patrol-dot" /> 순찰 · 0.8초 노출 후 피해
               </div>
             )}
           </div>
+          {playing && (
+            <div className={'threat-status ' + threat.level}>
+              <ShieldAlert size={15} aria-hidden="true" />
+              <output aria-live="polite" aria-atomic="true">
+                {threat.label}
+              </output>
+              {threat.level === 'exposed' && (
+                <span className="exposure-meter" aria-hidden="true">
+                  <i
+                    style={{
+                      width: `${(state.exposure / EXPOSURE_GRACE) * 100}%`,
+                    }}
+                  />
+                </span>
+              )}
+            </div>
+          )}
           <div className="world-bottom">
             <span>
               <kbd>W A S D</kbd> 이동 <kbd>E</kbd> 조사 <kbd>SHIFT</kbd> 달리기
@@ -973,14 +1042,22 @@ export default function Home() {
                     key={loc.id}
                     onClick={() => navigate(loc.id)}
                     disabled={!!panel}
-                    className={near?.id === loc.id ? 'active' : ''}
+                    className={
+                      'progress-' +
+                      progress[loc.id].kind +
+                      (near?.id === loc.id ? ' active' : '')
+                    }
+                    aria-label={`${loc.name} · ${progress[loc.id].label} · 이동하고 조사`}
                   >
-                    {state.visited.includes(loc.id) ? (
+                    {progress[loc.id].kind === 'done' ? (
                       <Check size={12} />
                     ) : (
                       <MapPin size={12} />
                     )}{' '}
-                    {loc.name}
+                    <span>
+                      {loc.name}
+                      <small>{progress[loc.id].label}</small>
+                    </span>
                   </button>
                 ))}
               </div>
@@ -1196,6 +1273,11 @@ export default function Home() {
                   <Check size={22} />
                 </span>
                 <p>{receipt}</p>
+                <div className="change-tags" aria-label="선택의 실제 변화">
+                  {state.log.at(-1)?.changes?.map((change) => (
+                    <span key={change}>{change}</span>
+                  ))}
+                </div>
                 <div className="receipt-stats">
                   남은 시간 {timeText(1800 - state.elapsed)} · 체력{' '}
                   {Math.round(state.health)} · 전력 {state.power}
@@ -1292,7 +1374,9 @@ export default function Home() {
                 <br />
                 탐험 중 실제 1초에 게임 시간 3초가 흐릅니다. 선택 비용은 별도로
                 표시됩니다. 대화·기록·배낭을 열거나 창을 벗어나면 멈춥니다.
-                주황색 순찰 원 안에 머무르면 체력을 잃습니다.
+                순찰이 가까워지면 방향을 알려줍니다. 주황색 원 안에서 0.8초 이상
+                노출되면 체력을 잃고, 원 밖으로 나오면 노출 시간이 초기화됩니다.
+                자동 이동 중에도 순찰을 살피고 직접 피하세요.
               </p>
               <p>
                 <b>선택과 관계</b>
@@ -1354,7 +1438,17 @@ export default function Home() {
                   .map((entry, i) => (
                     <div key={i}>
                       <time>00:{timeText(entry.at)}</time>
-                      <p>{entry.text}</p>
+                      <div className="journal-detail">
+                        {entry.action && <b>{entry.action}</b>}
+                        <p>{entry.text}</p>
+                        {entry.changes && (
+                          <div className="change-tags">
+                            {entry.changes.map((change) => (
+                              <span key={change}>{change}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))
               ) : (
