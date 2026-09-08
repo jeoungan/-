@@ -348,6 +348,48 @@ test('all places are walkable and reachable from every other place', () => {
       assert.equal(route.at(-1).y, b.y);
     }
 });
+test('walking paths enter and leave narrow map edges without crossing buildings', () => {
+  const edges = [
+    { x: 62.9, y: 197.2 },
+    { x: 55, y: 179 },
+    { x: 70, y: 234.9 },
+    { x: 71.1, y: 235.1 },
+    { x: 73.9, y: 382 },
+    { x: 74.1, y: 556.1 },
+    { x: 925, y: 618 },
+  ];
+  for (const edge of edges)
+    for (const place of PLACES)
+      for (const [from, to] of [
+        [edge, place],
+        [place, edge],
+      ]) {
+        const route = pathTo(from, to);
+        assert.ok(route.length, JSON.stringify({ from, to }));
+        assert.deepEqual(route.at(-1), to);
+        let previous = from;
+        for (const point of route) {
+          const samples = Math.ceil(
+            Math.hypot(point.x - previous.x, point.y - previous.y),
+          );
+          for (let i = 1; i <= samples; i++)
+            assert.ok(
+              walkable(
+                previous.x + ((point.x - previous.x) * i) / samples,
+                previous.y + ((point.y - previous.y) * i) / samples,
+              ),
+              JSON.stringify({ from, to, previous, point }),
+            );
+          previous = point;
+        }
+      }
+  const corner = pathTo({ x: 55, y: 234 }, { x: 71.2, y: 235.01 });
+  assert.ok(
+    corner.length > 1,
+    'a route must go around even a shallow building corner',
+  );
+  assert.ok(corner.some((p) => p.y >= 235));
+});
 test('running costs focus and increases alert; walking restores focus', () => {
   const base = { ...fresh(), x: 100, y: 300, focus: 50 };
   const run = tick(base, 1, true, true),

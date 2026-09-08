@@ -157,9 +157,10 @@ export default function Home() {
       path.current = [];
       destination.current = null;
       setTravel('');
+      update(ref.current);
       openPanel('event');
     },
-    [openPanel],
+    [openPanel, update],
   );
   const navigate = useCallback((id: PlaceId) => {
     if (ref.current.mode !== 'playing' || panelRef.current) return false;
@@ -351,7 +352,6 @@ export default function Home() {
             ref.current.y - PLACES.find((p) => p.id === dest)!.y,
           ) < 45
         ) {
-          update(ref.current);
           openPlace(dest);
         }
       }

@@ -1203,18 +1203,76 @@ export function pathTo(
   s: { x: number; y: number },
   target: { x: number; y: number },
 ): { x: number; y: number }[] {
-  if (!walkable(target.x, target.y)) return [];
+  if (!walkable(s.x, s.y) || !walkable(target.x, target.y)) return [];
   const step = 18,
     key = (x: number, y: number) => `${x},${y}`,
-    start = { x: Math.round(s.x / step), y: Math.round(s.y / step) },
-    goal = { x: Math.round(target.x / step), y: Math.round(target.y / step) },
-    queue = [start],
+    minX = Math.floor(55 / step),
+    maxX = Math.ceil(925 / step),
+    minY = Math.floor(179 / step),
+    maxY = Math.ceil(618 / step),
+    point = (x: number, y: number) => ({
+      x: Math.max(55, Math.min(925, x * step)),
+      y: Math.max(179, Math.min(618, y * step)),
+    }),
+    clear = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+      for (const block of BLOCKS) {
+        let enter = 0,
+          leave = 1;
+        for (const [from, to, low, high] of [
+          [a.x, b.x, block.x - 9, block.x + block.w + 9],
+          [a.y, b.y, block.y - 9, block.y + block.h + 9],
+        ]) {
+          const delta = to - from;
+          if (delta === 0) {
+            if (from <= low || from >= high) {
+              enter = 1;
+              leave = 0;
+              break;
+            }
+          } else {
+            const first = (low - from) / delta,
+              last = (high - from) / delta;
+            enter = Math.max(enter, Math.min(first, last));
+            leave = Math.min(leave, Math.max(first, last));
+          }
+        }
+        if (enter < leave) return false;
+      }
+      return true;
+    };
+  if (Math.hypot(s.x - target.x, s.y - target.y) < 5 && clear(s, target))
+    return [target];
+  // Include the map boundary so narrow paths beside buildings have grid nodes.
+  // Attach arbitrary player positions only through an unobstructed segment.
+  const rounded = { x: Math.round(s.x / step), y: Math.round(s.y / step) },
+    candidates = [];
+  for (let x = rounded.x - 1; x <= rounded.x + 1; x++)
+    for (let y = rounded.y - 1; y <= rounded.y + 1; y++) {
+      const p = point(x, y);
+      if (
+        x >= minX &&
+        x <= maxX &&
+        y >= minY &&
+        y <= maxY &&
+        walkable(p.x, p.y) &&
+        clear(s, p)
+      )
+        candidates.push({ x, y, distance: Math.hypot(p.x - s.x, p.y - s.y) });
+    }
+  candidates.sort((a, b) => a.distance - b.distance);
+  const start = candidates[0];
+  if (!start) return [];
+  const queue: { x: number; y: number }[] = [start],
     seen = new Set([key(start.x, start.y)]),
     prev = new Map<string, string>();
   let found = '';
   for (let i = 0; i < queue.length && i < 4000; i++) {
     const a = queue[i];
-    if (Math.hypot(a.x - goal.x, a.y - goal.y) <= 1) {
+    const position = point(a.x, a.y);
+    if (
+      Math.hypot(position.x - target.x, position.y - target.y) <= step * 1.5 &&
+      clear(position, target)
+    ) {
       found = key(a.x, a.y);
       break;
     }
@@ -1227,7 +1285,15 @@ export function pathTo(
       const x = a.x + dx,
         y = a.y + dy,
         k = key(x, y);
-      if (!seen.has(k) && walkable(x * step, y * step)) {
+      const p = point(x, y);
+      if (
+        !seen.has(k) &&
+        x >= minX &&
+        x <= maxX &&
+        y >= minY &&
+        y <= maxY &&
+        walkable(p.x, p.y)
+      ) {
         seen.add(k);
         prev.set(k, key(a.x, a.y));
         queue.push({ x, y });
@@ -1238,11 +1304,12 @@ export function pathTo(
   const out = [target];
   while (found !== key(start.x, start.y)) {
     const [x, y] = found.split(',').map(Number);
-    out.push({ x: x * step, y: y * step });
+    out.push(point(x, y));
     const p = prev.get(found);
     if (!p) break;
     found = p;
   }
+  out.push(point(start.x, start.y));
   return out.reverse();
 }
 export function patrols(t: number) {
