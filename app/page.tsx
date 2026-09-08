@@ -111,6 +111,8 @@ export default function Home() {
   const [run, setRun] = useState(false);
   const runRef = useRef(false);
   const canvas = useRef<HTMLCanvasElement>(null);
+  const endingTitle = useRef<HTMLHeadingElement>(null);
+  const endingFromDialog = useRef(false);
   const keys = useRef(new Set<string>());
   const path = useRef<Point[]>([]);
   const destination = useRef<PlaceId | null>(null);
@@ -121,6 +123,7 @@ export default function Home() {
     setState(s);
   }, []);
   const openPanel = useCallback((p: Panel) => {
+    if (p !== null) endingFromDialog.current = false;
     panelRef.current = p;
     setPanel(p);
     keys.current.clear();
@@ -179,6 +182,7 @@ export default function Home() {
       if (panelRef.current !== 'event' || receiptRef.current) return false;
       const next = choose(ref.current, placeRef.current, id);
       if (next === ref.current) return false;
+      if (next.mode === 'ending') endingFromDialog.current = true;
       update(next);
       save(next);
       receiptRef.current = next.lastEvent;
@@ -240,6 +244,11 @@ export default function Home() {
       );
     }
   }, []);
+  useEffect(() => {
+    // A departing story dialog restores focus through finalFocus instead.
+    if (state.mode !== 'ending') endingFromDialog.current = false;
+    else if (!endingFromDialog.current) endingTitle.current?.focus();
+  }, [state.mode, state.ending]);
   useEffect(() => {
     if (state.mode === 'ending' && state.ending) {
       try {
@@ -965,7 +974,9 @@ export default function Home() {
             {state.mode === 'ending' && ending && (
               <div className="ending-scrim">
                 <span className="eyebrow">{ending.subtitle}</span>
-                <h2>{ending.title}</h2>
+                <h2 ref={endingTitle} tabIndex={-1}>
+                  {ending.title}
+                </h2>
                 <p>{ending.body}</p>
                 <div className="ending-facts">
                   <span>
@@ -1281,8 +1292,25 @@ export default function Home() {
         onOpenChange={(v) => {
           if (!v) dismissPanel();
         }}
+        onOpenChangeComplete={(open) => {
+          if (
+            !open &&
+            endingFromDialog.current &&
+            ref.current.mode === 'ending' &&
+            !panelRef.current
+          )
+            endingTitle.current?.scrollIntoView({ block: 'nearest' });
+        }}
       >
-        <DialogContent className="story-dialog" showCloseButton={false}>
+        <DialogContent
+          className="story-dialog"
+          showCloseButton={false}
+          finalFocus={
+            endingFromDialog.current && ref.current.mode === 'ending'
+              ? endingTitle
+              : true
+          }
+        >
           <div className="dialog-top">
             <span className="eyebrow">
               {panel === 'event' ? story.tag : 'BLUE HOUR / FIELD NOTES'}

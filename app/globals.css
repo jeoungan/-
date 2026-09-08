@@ -1017,6 +1017,11 @@ kbd {
   letter-spacing: -1.4px;
   margin: 18px 0;
 }
+.ending-scrim h2:focus-visible {
+  outline: 2px solid #a2d2bf;
+  outline-offset: 7px;
+  border-radius: 3px;
+}
 .ending-scrim > p {
   font-size: 15px;
   line-height: 1.9;
