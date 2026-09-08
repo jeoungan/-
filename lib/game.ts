@@ -246,6 +246,17 @@ export const companionSkillReady = (s: GameState, person: Companion) =>
 export const evidence = (s: GameState) =>
   new Set(s.items.filter((i) => ['admin', 'medical', 'system'].includes(i)))
     .size;
+export function endingHint(s: GameState) {
+  if (s.mode !== 'ending' || !s.ending) return '';
+  if (
+    s.route &&
+    !['health', 'timeout'].includes(s.ending) &&
+    evidence(s) >= 2 &&
+    !has(s, 'truth')
+  )
+    return `증거 ${evidence(s)}개를 모았지만 공개 방송은 남았습니다. 다음 밤에는 증거를 모은 뒤, 탈출 전에 방송실에서 공개해 보세요.`;
+  return ENDINGS[s.ending]?.tip ?? '';
+}
 export const timeText = (seconds: number) => {
   const n = Math.max(0, Math.ceil(seconds));
   return `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;

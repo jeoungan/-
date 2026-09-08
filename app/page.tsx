@@ -45,6 +45,7 @@ import {
   ENDINGS,
   has,
   evidence,
+  endingHint,
   timeText,
   eventFor,
   choose,
@@ -989,6 +990,15 @@ export default function Home() {
                     {routeStatus.find((r) => r.id === state.route)?.title}
                   </small>
                 )}
+                <section
+                  className="ending-hint"
+                  aria-labelledby="ending-hint-title"
+                >
+                  <h3 id="ending-hint-title">
+                    <Compass size={14} /> 다음 밤의 단서
+                  </h3>
+                  <p>{endingHint(state)}</p>
+                </section>
                 <button className="primary" onClick={() => start(false)}>
                   다른 밤 시작하기 <RotateCcw size={16} />
                 </button>
@@ -1142,97 +1152,89 @@ export default function Home() {
               color="#d5a478"
             />
           </div>
-          <div className="mission">
-            {playing ? (
-              <Tabs defaultValue="routes" className="game-tabs">
-                <TabsList className="game-tabs-list">
-                  <TabsTrigger value="routes">탈출 경로</TabsTrigger>
-                  <TabsTrigger value="people">
-                    동료 {state.companions.length}/3
-                  </TabsTrigger>
-                </TabsList>
-                <TabsContent value="routes">
-                  <div className="route-list">{routeCards()}</div>
-                  <div className="truth-progress">
-                    <Radio size={15} />
-                    <span>
-                      {has(state, 'truth')
-                        ? '진실 공개 완료'
-                        : `진실의 조각 ${evidence(state)} / 3`}
-                    </span>
-                    <span>
-                      {has(state, 'truth') ? (
-                        <Check size={14} />
-                      ) : (
-                        <LockKeyhole size={13} />
-                      )}
-                    </span>
-                  </div>
-                </TabsContent>
-                <TabsContent value="people">
-                  <div className="people-list">
-                    {(Object.keys(PEOPLE) as Companion[]).map((id) => (
-                      <div className="person" key={id}>
-                        <span
-                          className="avatar"
-                          style={{ color: PEOPLE[id].color }}
-                        >
-                          {state.companions.includes(id)
-                            ? PEOPLE[id].letter
-                            : '?'}
-                        </span>
-                        <div>
-                          <b>
-                            {PEOPLE[id].name}
-                            <small>{PEOPLE[id].role}</small>
-                          </b>
-                          <p>
+          {!ending && (
+            <div className="mission">
+              {playing ? (
+                <Tabs defaultValue="routes" className="game-tabs">
+                  <TabsList className="game-tabs-list">
+                    <TabsTrigger value="routes">탈출 경로</TabsTrigger>
+                    <TabsTrigger value="people">
+                      동료 {state.companions.length}/3
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="routes">
+                    <div className="route-list">{routeCards()}</div>
+                    <div className="truth-progress">
+                      <Radio size={15} />
+                      <span>
+                        {has(state, 'truth')
+                          ? '진실 공개 완료'
+                          : `진실의 조각 ${evidence(state)} / 3`}
+                      </span>
+                      <span>
+                        {has(state, 'truth') ? (
+                          <Check size={14} />
+                        ) : (
+                          <LockKeyhole size={13} />
+                        )}
+                      </span>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="people">
+                    <div className="people-list">
+                      {(Object.keys(PEOPLE) as Companion[]).map((id) => (
+                        <div className="person" key={id}>
+                          <span
+                            className="avatar"
+                            style={{ color: PEOPLE[id].color }}
+                          >
                             {state.companions.includes(id)
-                              ? `신뢰 ${state.trust[id]}/3 · ${PEOPLE[id].ability}`
-                              : '아직 만나지 못한 사람'}
-                          </p>
+                              ? PEOPLE[id].letter
+                              : '?'}
+                          </span>
+                          <div>
+                            <b>
+                              {PEOPLE[id].name}
+                              <small>{PEOPLE[id].role}</small>
+                            </b>
+                            <p>
+                              {state.companions.includes(id)
+                                ? `신뢰 ${state.trust[id]}/3 · ${PEOPLE[id].ability}`
+                                : '아직 만나지 못한 사람'}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    className="text-button"
-                    onClick={() => navigate('fountain')}
-                  >
-                    광장에서 이야기하기 <ArrowRight size={13} />
-                  </button>
-                </TabsContent>
-              </Tabs>
-            ) : (
-              <>
-                <span className="eyebrow">
-                  {ending ? '다음 밤의 단서' : '첫 번째 목표'}
-                </span>
-                <h3>
-                  {ending ? '또 다른 선택이 남아 있다' : '흩어진 신호를 찾아서'}
-                </h3>
-                <p>
-                  {ending ? (
-                    ending.tip
-                  ) : (
-                    <>
-                      도서관의 불빛, 의무실의 목소리.
-                      <br />
-                      먼저 손을 내밀 곳을 선택하세요.
-                    </>
-                  )}
-                </p>
-                <div className="mission-hint">
-                  <Radio size={18} />
-                  <span>
-                    여섯 장소에 서로 다른 가능성이
+                      ))}
+                    </div>
+                    <button
+                      className="text-button"
+                      onClick={() => navigate('fountain')}
+                    >
+                      광장에서 이야기하기 <ArrowRight size={13} />
+                    </button>
+                  </TabsContent>
+                </Tabs>
+              ) : (
+                <>
+                  <span className="eyebrow">첫 번째 목표</span>
+                  <h3>흩어진 신호를 찾아서</h3>
+                  <p>
+                    도서관의 불빛, 의무실의 목소리.
                     <br />
-                    당신을 기다리고 있습니다.
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
+                    먼저 손을 내밀 곳을 선택하세요.
+                  </p>
+                  <div className="mission-hint">
+                    <Radio size={18} />
+                    <span>
+                      여섯 장소에 서로 다른 가능성이
+                      <br />
+                      당신을 기다리고 있습니다.
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <div className="panel-tools">
             <button onClick={() => openPanel('journal')}>
               <BookOpen size={15} /> 기록

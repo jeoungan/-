@@ -5,6 +5,8 @@ import {
   choose,
   eventFor,
   evidence,
+  endingHint,
+  ENDINGS,
   choiceDisabled,
   validateSave,
   tick,
@@ -30,6 +32,58 @@ const actions = (moves, initial = fresh()) =>
     assert.notStrictEqual(n, s);
     return n;
   }, initial);
+test('ending advice points collected evidence toward an unfinished broadcast', () => {
+  const gathered = actions([
+    ['library', 'power'],
+    ['library', 'photo'],
+    ['clinic', 'open'],
+    ['clinic', 'record'],
+  ]);
+  const escaped = actions(
+    [
+      ['gate', 'pump'],
+      ['gate', 'rush'],
+    ],
+    gathered,
+  );
+  assert.equal(escaped.ending, 'gate');
+  assert.match(endingHint(escaped), /증거 2개.*공개 방송은 남았습니다/);
+  const published = actions(
+    [
+      ['radio', 'speak'],
+      ['radio', 'truth'],
+      ['radio', 'leave'],
+    ],
+    gathered,
+  );
+  assert.equal(published.ending, 'truth');
+  assert.equal(endingHint(published), ENDINGS.truth.tip);
+  assert.equal(endingHint(gathered), '');
+});
+test('ending advice preserves failure help and uses the actual evidence count', () => {
+  for (const id of Object.keys(ENDINGS)) {
+    for (const items of [
+      [],
+      ['admin'],
+      ['admin', 'medical'],
+      ['admin', 'medical', 'system'],
+    ]) {
+      const s = {
+        ...fresh(),
+        mode: 'ending',
+        ending: id,
+        route: ['health', 'timeout'].includes(id) ? null : 'gate',
+        items,
+        flags: id === 'truth' ? ['truth'] : [],
+      };
+      const snapshot = structuredClone(s);
+      if (s.route && items.length >= 2 && id !== 'truth')
+        assert.match(endingHint(s), new RegExp(`증거 ${items.length}개`));
+      else assert.equal(endingHint(s), ENDINGS[id].tip);
+      assert.deepEqual(s, snapshot);
+    }
+  }
+});
 test('all five successful ending families are reachable through valid decisions', () => {
   const cases = [
     [

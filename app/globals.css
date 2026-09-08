@@ -1996,6 +1996,50 @@ kbd {
 .ending-scrim {
   z-index: 3;
 }
+.ending-hint {
+  width: min(100%, 480px);
+  margin: 0 0 18px;
+  padding: 13px 16px;
+  border: 1px solid #46635f;
+  border-radius: 8px;
+  background: #9edac00a;
+  text-align: left;
+}
+.ending-hint h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #b0d5c5;
+}
+.ending-hint p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #c0d3d2;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.world:has(.ending-scrim) {
+  aspect-ratio: auto;
+  max-height: none;
+}
+.world:has(.ending-scrim) > img {
+  position: absolute;
+  inset: 0;
+}
+.ending-scrim {
+  position: relative;
+  min-height: 520px;
+}
+@media (max-width: 760px) {
+  .ending-scrim {
+    min-height: 480px;
+    overflow: visible;
+  }
+}
 .stat-track {
   display: block;
   width: 100%;
