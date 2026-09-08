@@ -60,6 +60,7 @@ import {
   departureStatus,
   preparationPreview,
   choiceResources,
+  relationshipPreview,
   tick,
   validateSave,
   type GameState,
@@ -1674,6 +1675,7 @@ function ChoiceButton({
 }) {
   const reason = choiceDisabled(state, c);
   const preparation = preparationPreview(state, place, c);
+  const relationships = relationshipPreview(state, c);
   const result = choiceResources(state, c);
   const resources = (
     [
@@ -1750,6 +1752,24 @@ function ChoiceButton({
         {limitNotes.length > 0 && (
           <span className="resource-note">{limitNotes.join(' ')}</span>
         )}
+        {relationships.map((relationship) => (
+          <span
+            key={relationship.person}
+            className={
+              'relationship-preview' +
+              (relationship.unlocked ? ' unlocked' : '')
+            }
+          >
+            <strong>
+              {PEOPLE[relationship.person].name}
+              {relationship.joining ? ' 동행' : ''} · 신뢰{' '}
+              {relationship.delta
+                ? `${relationship.before} → ${relationship.after}/3`
+                : `${relationship.after}/3 유지${relationship.after === 3 ? ' · 최대' : ''}`}
+            </strong>
+            <small>{relationship.ability}</small>
+          </span>
+        ))}
         {preparation && (
           <span
             className={

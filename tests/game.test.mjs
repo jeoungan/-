@@ -14,6 +14,8 @@ import {
   departureStatus,
   preparationPreview,
   choiceResources,
+  relationshipPreview,
+  companionSkillReady,
   pathTo,
   PLACES,
   walkable,
@@ -271,6 +273,98 @@ test('corrupt saves cannot crash UI or violate gameplay invariants', () => {
 });
 test('evidence always counts distinct sources', () =>
   assert.equal(evidence({ ...fresh(), items: ['admin', 'admin'] }), 1));
+
+test('recruitment previews distinguish immediate support from trust-gated skills', () => {
+  const s = fresh();
+  for (const [place, id, trust, ready] of [
+    ['clinic', 'hold', 1, true],
+    ['engineering', 'pull', 1, false],
+    ['engineering', 'cell', 2, true],
+    ['radio', 'unplug', 1, false],
+    ['radio', 'speak', 2, true],
+  ]) {
+    const ch = eventFor(s, place).choices.find((c) => c.id === id);
+    const [preview] = relationshipPreview(s, ch);
+    const actual = choose(s, place, id);
+    assert.equal(preview.joining, true);
+    assert.equal(preview.after, trust);
+    assert.equal(preview.ready, ready);
+    assert.equal(preview.after, actual.trust[preview.person]);
+    assert.equal(preview.ready, companionSkillReady(actual, preview.person));
+    if (place === 'clinic')
+      assert.match(preview.ability, /동행 즉시 수문 통과 피해 8 감소/);
+  }
+  const doha = choose(s, 'engineering', 'pull');
+  assert.equal(
+    eventFor(doha, 'gate').choices.find((c) => c.id === 'manual').minutes,
+    2,
+  );
+  const radio = { ...doha, companions: ['doha', 'minjae'] };
+  assert.equal(
+    eventFor(radio, 'radio').choices.find((c) => c.id === 'manual').health,
+    0,
+  );
+});
+
+test('conversation preview unlocks the correct skill and never repeats a spent dialogue hint', () => {
+  const s = actions([
+    ['radio', 'unplug'],
+    ['fountain', 'cell'],
+  ]);
+  const ch = eventFor(s, 'fountain').choices.find(
+    (c) => c.id === 'talk-minjae',
+  );
+  const [preview] = relationshipPreview(s, ch);
+  assert.equal(preview.before, 1);
+  assert.equal(preview.after, 2);
+  assert.equal(preview.unlocked, true);
+  assert.match(preview.ability, /최초 구조 송신 전력 2 → 1/);
+  const actual = choose(s, 'fountain', ch.id);
+  assert.equal(
+    eventFor(actual, 'radio').choices.find((c) => c.id === 'rescue').power,
+    -1,
+  );
+  assert.ok(!eventFor(actual, 'fountain').choices.some((c) => c.id === ch.id));
+  const low = { ...s, trust: { ...s.trust, minjae: 0 } };
+  const [spent] = relationshipPreview(low, ch);
+  assert.match(spent.ability, /광장 대화 완료/);
+  assert.doesNotMatch(spent.ability, /광장 대화 가능/);
+});
+
+test('maximum trust preserves other dialogue rewards without claiming a new unlock', () => {
+  for (const trust of [2, 3]) {
+    const s = {
+      ...fresh(),
+      companions: ['doha'],
+      flags: ['cache'],
+      trust: { seoyun: 0, minjae: 0, doha: trust },
+    };
+    const ch = eventFor(s, 'fountain').choices[0];
+    const [preview] = relationshipPreview(s, ch);
+    assert.equal(preview.after, 3);
+    assert.equal(preview.delta, 3 - trust);
+    assert.equal(preview.unlocked, false);
+    assert.match(preview.ability, /유지/);
+    assert.equal(choiceDisabled(s, ch), undefined);
+    assert.equal(choose(s, 'fountain', ch.id).alert, 6);
+  }
+});
+
+test('relationship preview leaves frozen input untouched and requires companionship', () => {
+  const s = fresh();
+  Object.freeze(s.trust);
+  Object.freeze(s.companions);
+  Object.freeze(s.flags);
+  Object.freeze(s);
+  const ch = eventFor(s, 'engineering').choices[0];
+  const original = JSON.stringify(s);
+  relationshipPreview(s, ch);
+  assert.equal(JSON.stringify(s), original);
+  assert.equal(
+    companionSkillReady({ ...s, trust: { ...s.trust, doha: 3 } }, 'doha'),
+    false,
+  );
+});
 
 test('resource preview gives capped recovery, charge and alert outcomes', () => {
   const full = fresh();

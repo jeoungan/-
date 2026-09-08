@@ -1190,6 +1190,28 @@ kbd {
   color: #c9c4ad;
   line-height: 1.6;
 }
+.choice .choice-main > .relationship-preview {
+  display: block;
+  margin-top: 5px;
+  padding-left: 9px;
+  border-left: 2px solid #587b87;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #b2c9d0;
+}
+.relationship-preview strong {
+  display: block;
+  font-weight: 500;
+  color: #d3e4e8;
+}
+.relationship-preview small {
+  display: block;
+  font-size: inherit;
+}
+.choice .choice-main > .relationship-preview.unlocked {
+  border-color: #aad6be;
+  color: #c0dccb;
+}
 .choice .choice-main > .preparation-note {
   display: block;
   border-left: 2px solid #8fb4ad;

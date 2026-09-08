@@ -239,6 +239,10 @@ export const initialState = (): GameState => ({
   damageCooldown: 0,
 });
 export const has = (s: GameState, f: string) => s.flags.includes(f);
+// The advertised skill; Doha's passive help with manual tasks needs only companionship.
+export const companionSkillReady = (s: GameState, person: Companion) =>
+  s.companions.includes(person) &&
+  (person === 'seoyun' || s.trust[person] >= 2);
 export const evidence = (s: GameState) =>
   new Set(s.items.filter((i) => ['admin', 'medical', 'system'].includes(i)))
     .size;
@@ -257,7 +261,7 @@ const c = (
   rest: Partial<Choice> = {},
 ): Choice => ({ id, label, detail, minutes, result, ...rest });
 export function eventFor(s: GameState, id: PlaceId): StoryEvent {
-  const trust = (p: Companion) => s.companions.includes(p) && s.trust[p] >= 2;
+  const trust = (p: Companion) => companionSkillReady(s, p);
   if (id === 'fountain')
     return !has(s, 'cache')
       ? {
@@ -750,7 +754,7 @@ export function eventFor(s: GameState, id: PlaceId): StoryEvent {
           ),
         ],
       };
-    const discount = s.companions.includes('seoyun') ? 8 : 0;
+    const discount = companionSkillReady(s, 'seoyun') ? 8 : 0;
     return {
       id: 'water',
       tag: '05 / 탈출 경로',
@@ -975,6 +979,58 @@ export function choiceResources(s: GameState, choice: Choice) {
     alert: Math.max(0, Math.min(100, s.alert + (choice.alert ?? 0))),
   };
 }
+export function choiceTrust(s: GameState, choice: Choice) {
+  const trust = { ...s.trust };
+  for (const person of Object.keys(choice.trust ?? {}) as Companion[])
+    trust[person] = Math.min(3, trust[person] + (choice.trust?.[person] ?? 0));
+  return trust;
+}
+export function relationshipPreview(s: GameState, choice: Choice) {
+  const after: GameState = {
+    ...s,
+    trust: choiceTrust(s, choice),
+    companions: [...new Set([...s.companions, ...(choice.companions ?? [])])],
+    flags: [...new Set([...s.flags, ...(choice.flags ?? [])])],
+  };
+  return (Object.keys(PEOPLE) as Companion[])
+    .filter(
+      (person) => choice.trust?.[person] || choice.companions?.includes(person),
+    )
+    .map((person) => {
+      const beforeTrust = s.trust[person],
+        afterTrust = after.trust[person];
+      const joining =
+        !s.companions.includes(person) && after.companions.includes(person);
+      const ready = companionSkillReady(after, person);
+      const unlocked = ready && !companionSkillReady(s, person);
+      const talk = has(after, 'talk-' + person)
+        ? '광장 대화 완료'
+        : has(after, 'cache')
+          ? '광장 대화 가능'
+          : '비상함 조사 후 광장 대화 가능';
+      const ability = !after.companions.includes(person)
+        ? '동행해야 능력을 사용할 수 있습니다.'
+        : person === 'seoyun'
+          ? `${joining ? '동행 즉시 ' : ''}수문 통과 피해 8 감소${unlocked ? '' : ' · 유지'}`
+          : person === 'doha'
+            ? ready
+              ? `부품·전력 없이 셔틀 수리 가능${unlocked ? '' : ' · 유지'}`
+              : `셔틀 수리는 신뢰 2 필요 · ${talk}`
+            : ready
+              ? `최초 구조 송신 전력 2 → 1${unlocked ? '' : ' · 유지'}`
+              : `송신 전력 할인은 신뢰 2 필요 · ${talk}`;
+      return {
+        person,
+        before: beforeTrust,
+        after: afterTrust,
+        delta: afterTrust - beforeTrust,
+        joining,
+        ready,
+        unlocked,
+        ability,
+      };
+    });
+}
 export function choose(
   s: GameState,
   place: PlaceId,
@@ -991,13 +1047,11 @@ export function choose(
     items: [...new Set([...s.items, ...(ch.items ?? [])])],
     companions: [...new Set([...s.companions, ...(ch.companions ?? [])])],
     flags: [...new Set([...s.flags, ...(ch.flags ?? [])])],
-    trust: { ...s.trust },
+    trust: choiceTrust(s, ch),
     visited: [...new Set([...s.visited, place])],
     lastEvent: ch.result,
     log: s.log,
   };
-  for (const p of Object.keys(ch.trust ?? {}) as Companion[])
-    n.trust[p] = Math.min(3, n.trust[p] + (ch.trust?.[p] ?? 0));
   n.log = [
     ...s.log,
     {
