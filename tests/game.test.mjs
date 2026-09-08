@@ -13,6 +13,7 @@ import {
   placeProgress,
   departureStatus,
   preparationPreview,
+  choiceResources,
   pathTo,
   PLACES,
   walkable,
@@ -270,6 +271,55 @@ test('corrupt saves cannot crash UI or violate gameplay invariants', () => {
 });
 test('evidence always counts distinct sources', () =>
   assert.equal(evidence({ ...fresh(), items: ['admin', 'admin'] }), 1));
+
+test('resource preview gives capped recovery, charge and alert outcomes', () => {
+  const full = fresh();
+  const bandage = eventFor(full, 'fountain').choices.find(
+    (c) => c.id === 'bandage',
+  );
+  assert.deepEqual(choiceResources(full, bandage), {
+    health: 100,
+    power: 3,
+    alert: 0,
+  });
+  const cell = eventFor(full, 'fountain').choices.find((c) => c.id === 'cell');
+  assert.deepEqual(choiceResources({ ...full, power: 8 }, cell), {
+    health: 100,
+    power: 9,
+    alert: 12,
+  });
+  assert.deepEqual(
+    choiceResources({ ...full, health: 90, alert: 20 }, bandage),
+    { health: 100, power: 3, alert: 5 },
+  );
+  const glass = eventFor(full, 'library').choices.find((c) => c.id === 'break');
+  assert.deepEqual(choiceResources({ ...full, alert: 95 }, glass), {
+    health: 94,
+    power: 3,
+    alert: 100,
+  });
+});
+
+test('resource preview matches actual choices without altering input state', () => {
+  for (const health of [20, 90, 100])
+    for (const power of [0, 8, 9])
+      for (const alert of [0, 12, 98]) {
+        const s = { ...fresh(), health, power, alert };
+        const original = JSON.stringify(s);
+        for (const place of PLACES)
+          for (const choice of eventFor(s, place.id).choices) {
+            if (choiceDisabled(s, choice)) continue;
+            const preview = choiceResources(s, choice);
+            const actual = choose(s, place.id, choice.id);
+            assert.deepEqual(preview, {
+              health: actual.health,
+              power: actual.power,
+              alert: actual.alert,
+            });
+          }
+        assert.equal(JSON.stringify(s), original);
+      }
+});
 
 test('departure cards and place markers agree at each route time boundary', () => {
   const cases = [

@@ -59,6 +59,7 @@ import {
   placeProgress,
   departureStatus,
   preparationPreview,
+  choiceResources,
   tick,
   validateSave,
   type GameState,
@@ -821,18 +822,22 @@ export default function Home() {
       {playing && (
         <div className="mobile-hud">
           <span>
+            <span className="sr-only">남은 시간 </span>
             <Clock3 size={14} />
             <b>{timeText(1800 - state.elapsed)}</b>
           </span>
           <span>
+            <span className="sr-only">체력 </span>
             <Heart size={14} />
             {Math.round(state.health)}
           </span>
           <span>
+            <span className="sr-only">경계도 </span>
             <ShieldAlert size={14} />
             {Math.round(state.alert)}
           </span>
           <span>
+            <span className="sr-only">전력 </span>
             <Zap size={14} />
             {state.power}
           </span>
@@ -1669,6 +1674,43 @@ function ChoiceButton({
 }) {
   const reason = choiceDisabled(state, c);
   const preparation = preparationPreview(state, place, c);
+  const result = choiceResources(state, c);
+  const resources = (
+    [
+      ['health', '체력'],
+      ['power', '전력'],
+      ['alert', '경계'],
+    ] as const
+  )
+    .filter(([key]) => c[key])
+    .map(([key, label]) => {
+      const delta = Number((result[key] - state[key]).toFixed(1));
+      const limited =
+        Math.abs(result[key] - state[key] - (c[key] ?? 0)) > 0.001;
+      const note = !limited
+        ? null
+        : key === 'health'
+          ? delta
+            ? '체력은 100까지 회복됩니다.'
+            : '체력은 이미 최대입니다.'
+          : key === 'power'
+            ? delta
+              ? '전력은 9까지 충전됩니다.'
+              : '전력은 이미 가득 찼습니다.'
+            : result.alert === 0
+              ? '경계는 0까지만 내려갑니다.'
+              : '경계는 100까지만 올라갑니다.';
+      return {
+        key,
+        label,
+        delta,
+        note,
+        positive: key === 'alert' ? delta < 0 : delta > 0,
+      };
+    });
+  const limitNotes = resources.flatMap((resource) =>
+    resource.note ? [resource.note] : [],
+  );
   return (
     <button className="choice" disabled={!!reason} onClick={onClick}>
       <span className="choice-number">
@@ -1686,26 +1728,28 @@ function ChoiceButton({
             <Clock3 size={12} />
             {c.minutes}분
           </i>
-          {!!c.health && (
-            <i className={c.health < 0 ? 'cost-negative' : 'cost-positive'}>
-              체력 {c.health > 0 ? '+' : ''}
-              {c.health}
+          {resources.map(({ key, label, delta, positive }) => (
+            <i
+              key={key}
+              className={
+                !delta
+                  ? 'cost-neutral'
+                  : positive
+                    ? 'cost-positive'
+                    : 'cost-negative'
+              }
+            >
+              {label}{' '}
+              {delta
+                ? `${delta > 0 ? '+' : '−'}${Math.abs(delta)}`
+                : '변화 없음'}
             </i>
-          )}
-          {!!c.power && (
-            <i className={c.power < 0 ? 'cost-negative' : 'cost-positive'}>
-              전력 {c.power > 0 ? '+' : ''}
-              {c.power}
-            </i>
-          )}
-          {!!c.alert && (
-            <i className={c.alert > 0 ? 'cost-negative' : 'cost-positive'}>
-              경계 {c.alert > 0 ? '+' : ''}
-              {c.alert}
-            </i>
-          )}
+          ))}
           {c.route && <i className="cost-positive">탈출</i>}
         </span>
+        {limitNotes.length > 0 && (
+          <span className="resource-note">{limitNotes.join(' ')}</span>
+        )}
         {preparation && (
           <span
             className={

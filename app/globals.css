@@ -1182,6 +1182,14 @@ kbd {
 .choice-cost .cost-negative {
   color: #cda992;
 }
+.choice-cost .cost-neutral {
+  color: #a7b4b9;
+}
+.choice .choice-main > .resource-note {
+  font-size: 12px;
+  color: #c9c4ad;
+  line-height: 1.6;
+}
 .choice .choice-main > .preparation-note {
   display: block;
   border-left: 2px solid #8fb4ad;

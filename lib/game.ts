@@ -480,7 +480,7 @@ export function eventFor(s: GameState, id: PlaceId): StoryEvent {
           c(
             'take',
             '접수 기록을 챙긴다',
-            '두 번째 증거를 방송실로 가져갈 수 있다.',
+            '공개 방송에 사용할 환자 기록을 확보한다.',
             2,
             '환자 기록을 확보했다.',
             { items: ['medical'] },
@@ -534,7 +534,7 @@ export function eventFor(s: GameState, id: PlaceId): StoryEvent {
           c(
             'both',
             '구동 부품과 변경 기록을 함께 회수한다',
-            '셔틀 부품과 세 번째 증거를 얻는다.',
+            '셔틀 부품과 제어기 변경 기록을 얻는다.',
             4,
             '부품과 변경 기록을 회수했다. 봉쇄는 누군가의 결정이었다.',
             { items: ['parts', 'system'] },
@@ -968,6 +968,13 @@ export function choiceChanges(
   }
   return changes;
 }
+export function choiceResources(s: GameState, choice: Choice) {
+  return {
+    health: Math.min(100, s.health + (choice.health ?? 0)),
+    power: Math.min(9, s.power + (choice.power ?? 0)),
+    alert: Math.max(0, Math.min(100, s.alert + (choice.alert ?? 0))),
+  };
+}
 export function choose(
   s: GameState,
   place: PlaceId,
@@ -980,9 +987,7 @@ export function choose(
   const n: GameState = {
     ...s,
     elapsed: s.elapsed + ch.minutes * 60,
-    health: Math.min(100, s.health + (ch.health ?? 0)),
-    power: Math.min(9, s.power + (ch.power ?? 0)),
-    alert: Math.max(0, Math.min(100, s.alert + (ch.alert ?? 0))),
+    ...choiceResources(s, ch),
     items: [...new Set([...s.items, ...(ch.items ?? [])])],
     companions: [...new Set([...s.companions, ...(ch.companions ?? [])])],
     flags: [...new Set([...s.flags, ...(ch.flags ?? [])])],
