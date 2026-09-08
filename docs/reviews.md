@@ -63,3 +63,11 @@ https://last-shuttle.jpcgpt.chatgpt.site/ 에서 중앙 광장 → 본관 → �
 - 최종 390×844 실제 탐험 스크린샷: 상단 sticky 시간·체력·경계·전력, 전체 지도와 장소 이름, 조사·달리기·목적지 버튼 표시. 가로 넘침 없음. 브라우저 error/warn 로그 없음.
 - WebMCP 두 도구 등록 확인. read_game_state 결과와 UI 일치. navigate_to_campus_location(valid: gate) 실제 이동 후 수문 조사창 열림. invalid-place는 Unknown location으로 의도적 거부, 상태 보존.
 - 자동화는 게시 이후 동일 사이트의 접근 범위를 유지하며 다음 리뷰부터 개선 갱신한다.
+
+### 게시 결과
+
+- 비공개 게시 성공: https://blue-hour-campus.hsmu-makers.chatgpt.site
+- 첫 저장 버전 1, 소스 eeb083b22f3d2b798a19c67cd2bfbba8d3ea8891, 상태 succeeded.
+- 배포 후 실제 URL은 비로그인 브라우저에서 정상적으로 'ChatGPT로 계속' 로그인 화면을 표시한다. 현재 접근 범위는 소유자 전용이며 공개 게임으로 바꾸지 않았다.
+- Windows 패키징 주의: 공식 package-site.sh를 여러 환경에서 시도했고 prepare-site-build.cjs의 입력·메타데이터·일반파일 검증은 통과했으나 Node fs.cpSync(input,destination)에서 오류문 없이 종료했다. 실제 스테이징은 검증된 dist를 PowerShell Copy-Item -Recurse로 새 outputs/site-package/dist로 복사하고 .openai/hosting.json을 넣은 뒤 C:/Windows/System32/tar.exe -czf로 동일 dist/ 계약의 archive를 생성했다. tar 내부 server/index.js, client/campus.png, .openai/hosting.json 존재 확인 후 save_site_version이 60개 파일의 archive를 정상 수락했다. 다음 회차도 공식 도구 먼저 사용하되 같은 원인이 반복되면 이 근거를 재사용한다. 기존 패키징 폴더를 삭제·재활용하지 말고 새 경로를 사용한다.
+- local dev server는 첫 게시 후 종료. 다음 개발 라운드는 npm run dev로 시작하며 .openai/hosting.json의 project_id를 재사용할 것.
