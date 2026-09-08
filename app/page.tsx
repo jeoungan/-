@@ -57,6 +57,8 @@ import {
   patrolThreat,
   EXPOSURE_GRACE,
   placeProgress,
+  departureStatus,
+  preparationPreview,
   tick,
   validateSave,
   type GameState,
@@ -122,6 +124,13 @@ export default function Home() {
     receiptRef.current = '';
     setReceipt('');
   }, []);
+  const dismissPanel = useCallback(() => {
+    openPanel(
+      panelRef.current === 'restart' && ref.current.mode === 'playing'
+        ? 'pause'
+        : null,
+    );
+  }, [openPanel]);
   const save = useCallback((s: GameState) => {
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(s));
@@ -193,6 +202,10 @@ export default function Home() {
             };
       update(s);
       save(s);
+      if (!resume) {
+        runRef.current = false;
+        setRun(false);
+      }
       path.current = [];
       setTravel('');
       if (resume) openPanel(null);
@@ -677,7 +690,6 @@ export default function Home() {
     {
       id: 'shuttle' as PlaceId,
       title: '해안도로 · 셔틀',
-      ready: has(state, 'shuttle-ready'),
       hint: has(state, 'shuttle-ready')
         ? '시동 완료. 차고에서 출발하세요.'
         : state.companions.includes('doha') && state.trust.doha >= 2
@@ -687,7 +699,6 @@ export default function Home() {
     {
       id: 'gate' as PlaceId,
       title: '방파제 · 지하 수문',
-      ready: has(state, 'gate-open'),
       hint: has(state, 'gate-open')
         ? '통로 개방. 건너는 방법을 고르세요.'
         : state.items.includes('map')
@@ -697,12 +708,22 @@ export default function Home() {
     {
       id: 'radio' as PlaceId,
       title: '안개 위 · 옥상 구조',
-      ready: has(state, 'signal'),
       hint: has(state, 'signal')
         ? '신호 수신 완료. 옥상으로 올라가세요.'
         : '방송실에서 동료와 구조 신호 송출',
     },
-  ];
+  ].map((route) => {
+    const departure = departureStatus(state, route.id);
+    return {
+      ...route,
+      ready: departure.canDepart,
+      blocked: departure.prepared && !departure.canDepart,
+      hint: departure.prepared
+        ? (departure.reason ??
+          `출발 가능 · 현재 조건에서 최소 ${departure.minutes}분 필요`)
+        : route.hint,
+    };
+  });
   const goFromPanel = (id: PlaceId) => {
     openPanel(null);
     navigate(id);
@@ -711,12 +732,20 @@ export default function Home() {
     routeStatus.map((r) => (
       <button
         key={r.id}
-        className={'route-card ' + (r.ready ? 'ready' : '')}
+        className={
+          'route-card ' + (r.ready ? 'ready' : r.blocked ? 'blocked' : '')
+        }
         disabled={!playing}
         onClick={() => goFromPanel(r.id)}
       >
         <span className="route-icon">
-          {r.ready ? <Check size={16} /> : <RouteIcon size={16} />}
+          {r.ready ? (
+            <Check size={16} />
+          ) : r.blocked ? (
+            <Clock3 size={16} />
+          ) : (
+            <RouteIcon size={16} />
+          )}
         </span>
         <span>
           <b>{r.title}</b>
@@ -1242,7 +1271,7 @@ export default function Home() {
       <Dialog
         open={panel !== null}
         onOpenChange={(v) => {
-          if (!v) openPanel(null);
+          if (!v) dismissPanel();
         }}
       >
         <DialogContent className="story-dialog" showCloseButton={false}>
@@ -1252,8 +1281,12 @@ export default function Home() {
             </span>
             <button
               className="close-button"
-              aria-label="닫고 탐험 계속하기"
-              onClick={() => openPanel(null)}
+              aria-label={
+                panel === 'restart' && playing
+                  ? '재시작 취소하고 일시 정지로 돌아가기'
+                  : '닫고 탐험 계속하기'
+              }
+              onClick={dismissPanel}
             >
               <X size={19} />
             </button>
@@ -1323,6 +1356,7 @@ export default function Home() {
                     <ChoiceButton
                       key={ch.id}
                       choice={ch}
+                      place={place}
                       index={i}
                       state={state}
                       onClick={() => selectChoice(ch.id)}
@@ -1541,7 +1575,7 @@ export default function Home() {
               <button className="primary" onClick={() => start(false)}>
                 새 게임 시작 <RotateCcw size={16} />
               </button>
-              <button className="secondary" onClick={() => openPanel(null)}>
+              <button className="secondary" onClick={dismissPanel}>
                 현재 기록 유지하기
               </button>
             </div>
@@ -1622,16 +1656,19 @@ function Stat({
 }
 function ChoiceButton({
   choice: c,
+  place,
   index,
   state,
   onClick,
 }: {
   choice: Choice;
+  place: PlaceId;
   index: number;
   state: GameState;
   onClick: () => void;
 }) {
   const reason = choiceDisabled(state, c);
+  const preparation = preparationPreview(state, place, c);
   return (
     <button className="choice" disabled={!!reason} onClick={onClick}>
       <span className="choice-number">
@@ -1669,6 +1706,18 @@ function ChoiceButton({
           )}
           {c.route && <i className="cost-positive">탈출</i>}
         </span>
+        {preparation && (
+          <span
+            className={
+              'preparation-note' + (preparation.insufficient ? ' warning' : '')
+            }
+          >
+            준비 {c.minutes}분 + 이후 출발 최소 {preparation.minutes}분
+            {preparation.insufficient && (
+              <small>준비를 마쳐도 이 경로로 탈출할 시간이 부족합니다.</small>
+            )}
+          </span>
+        )}
         {reason && <span className="locked-reason">{reason}</span>}
       </span>
       <ChevronRight size={16} />

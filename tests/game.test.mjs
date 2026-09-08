@@ -11,6 +11,8 @@ import {
   patrols,
   patrolThreat,
   placeProgress,
+  departureStatus,
+  preparationPreview,
   pathTo,
   PLACES,
   walkable,
@@ -268,6 +270,79 @@ test('corrupt saves cannot crash UI or violate gameplay invariants', () => {
 });
 test('evidence always counts distinct sources', () =>
   assert.equal(evidence({ ...fresh(), items: ['admin', 'admin'] }), 1));
+
+test('departure cards and place markers agree at each route time boundary', () => {
+  const cases = [
+    ['gate', { flags: ['gate-open'] }, 2],
+    ['shuttle', { flags: ['shuttle-ready'] }, 1],
+    ['radio', { flags: ['signal'], companions: ['minjae'] }, 3],
+  ];
+  for (const [place, extra, minutes] of cases) {
+    for (const offset of [-1, 0, 1]) {
+      const s = { ...fresh(), ...extra, elapsed: 1800 - minutes * 60 + offset };
+      const status = departureStatus(s, place);
+      assert.equal(status.minutes, minutes);
+      assert.equal(status.canDepart, offset <= 0);
+      assert.equal(
+        status.canDepart,
+        eventFor(s, place).choices.some(
+          (c) => c.route && !choiceDisabled(s, c),
+        ),
+      );
+      assert.equal(
+        placeProgress(s, place).kind,
+        offset <= 0 ? 'ready' : 'blocked',
+      );
+      if (offset > 0) assert.match(status.reason, /출발 시간 부족/);
+    }
+  }
+});
+
+test('preparation preview warns before a dead-end commitment without blocking it', () => {
+  const s = {
+    ...fresh(),
+    companions: ['minjae'],
+    trust: { seoyun: 0, minjae: 2, doha: 0 },
+    elapsed: 1500,
+  };
+  const ch = eventFor(s, 'radio').choices.find((c) => c.id === 'rescue');
+  const original = JSON.stringify(s);
+  assert.deepEqual(preparationPreview(s, 'radio', ch), {
+    minutes: 3,
+    insufficient: false,
+  });
+  const late = { ...s, elapsed: 1501 };
+  assert.deepEqual(preparationPreview(late, 'radio', ch), {
+    minutes: 3,
+    insufficient: true,
+  });
+  assert.equal(choiceDisabled(late, ch), undefined);
+  assert.notStrictEqual(choose(late, 'radio', ch.id), late);
+  assert.equal(JSON.stringify(s), original, 'preview never mutates the game');
+  const escape = { ...s, flags: ['signal'] };
+  assert.equal(
+    preparationPreview(escape, 'radio', eventFor(escape, 'radio').choices[0]),
+    null,
+  );
+});
+
+test('departure estimates respect health costs and companion help', () => {
+  const gate = { ...fresh(), flags: ['gate-open'], health: 1 };
+  assert.equal(departureStatus(gate, 'gate').minutes, 6);
+  assert.equal(departureStatus({ ...gate, health: 19 }, 'gate').minutes, 4);
+  assert.equal(departureStatus({ ...gate, health: 35 }, 'gate').minutes, 2);
+  assert.equal(
+    departureStatus({ ...gate, health: 27, companions: ['seoyun'] }, 'gate')
+      .minutes,
+    2,
+  );
+  const s = { ...fresh(), health: 1, elapsed: 1500 };
+  const pump = eventFor(s, 'gate').choices.find((c) => c.id === 'pump');
+  assert.deepEqual(preparationPreview(s, 'gate', pump), {
+    minutes: 6,
+    insufficient: true,
+  });
+});
 
 test('location status tracks remaining investigation, returning conversations and usable departures', () => {
   let s = actions([['library', 'power']]);

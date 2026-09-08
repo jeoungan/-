@@ -879,9 +879,46 @@ export function choiceDisabled(s: GameState, c: Choice): string | undefined {
     return `시간 부족 · ${c.minutes}분 필요`;
   return undefined;
 }
+export function departureStatus(s: GameState, id: PlaceId) {
+  const departures = eventFor(s, id).choices.filter((choice) => choice.route);
+  const affordable = departures.filter(
+    (choice) => !choiceDisabled({ ...s, elapsed: 0 }, choice),
+  );
+  const minutes = affordable.length
+    ? Math.min(...affordable.map((choice) => choice.minutes))
+    : null;
+  const canDepart = departures.some((choice) => !choiceDisabled(s, choice));
+  return {
+    prepared: departures.length > 0,
+    canDepart,
+    minutes,
+    reason:
+      canDepart || !departures.length
+        ? null
+        : minutes !== null
+          ? `출발 시간 부족 · 최소 ${minutes}분 필요`
+          : (choiceDisabled(s, departures[0]) ?? '출발 조건 부족'),
+  };
+}
+export function preparationPreview(s: GameState, id: PlaceId, choice: Choice) {
+  if (
+    !choice.flags?.some((flag) =>
+      ['signal', 'gate-open', 'shuttle-ready'].includes(flag),
+    ) ||
+    choiceDisabled(s, choice)
+  )
+    return null;
+  const prepared = choose({ ...s, elapsed: 0 }, id, choice.id);
+  const departure = departureStatus(
+    { ...prepared, elapsed: s.elapsed + choice.minutes * 60 },
+    id,
+  );
+  if (!departure.prepared || departure.minutes === null) return null;
+  return { minutes: departure.minutes, insufficient: !departure.canDepart };
+}
 export function placeProgress(s: GameState, id: PlaceId) {
   const event = eventFor(s, id);
-  const departures = event.choices.filter((choice) => choice.route);
+  const departure = departureStatus(s, id);
   if (
     id === 'radio' &&
     event.choices.some(
@@ -889,9 +926,8 @@ export function placeProgress(s: GameState, id: PlaceId) {
     )
   )
     return { kind: 'available', label: '추가 방송 가능' };
-  if (departures.some((choice) => !choiceDisabled(s, choice)))
-    return { kind: 'ready', label: '출발 가능' };
-  if (departures.length) return { kind: 'blocked', label: '출발 조건 부족' };
+  if (departure.canDepart) return { kind: 'ready', label: '출발 가능' };
+  if (departure.prepared) return { kind: 'blocked', label: '출발 조건 부족' };
   if (id === 'fountain' && has(s, 'cache') && event.choices.length)
     return { kind: 'available', label: '대화 가능' };
   if (!event.choices.length)

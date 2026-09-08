@@ -1182,6 +1182,27 @@ kbd {
 .choice-cost .cost-negative {
   color: #cda992;
 }
+.choice .choice-main > .preparation-note {
+  display: block;
+  border-left: 2px solid #8fb4ad;
+  padding-left: 9px;
+  margin-top: 9px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #adcdc7;
+}
+.choice .choice-main > .preparation-note.warning {
+  border-color: #d7a577;
+  color: #edc492;
+}
+.preparation-note small {
+  display: block;
+  font-size: inherit;
+}
+.route-card.blocked .route-icon,
+.route-card.blocked small {
+  color: #e1b98f;
+}
 .choice:disabled {
   background: #13232c;
   border-color: #293d47;
