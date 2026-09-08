@@ -62,6 +62,7 @@ import {
   preparationPreview,
   choiceResources,
   relationshipPreview,
+  conversationStatus,
   tick,
   validateSave,
   type GameState,
@@ -1217,12 +1218,11 @@ export default function Home() {
                         </div>
                       ))}
                     </div>
-                    <button
-                      className="text-button"
-                      onClick={() => navigate('fountain')}
-                    >
-                      광장에서 이야기하기 <ArrowRight size={13} />
-                    </button>
+                    <ConversationPrompt
+                      state={state}
+                      onGo={() => navigate('fountain')}
+                      compact
+                    />
                   </TabsContent>
                 </Tabs>
               ) : (
@@ -1571,12 +1571,10 @@ export default function Home() {
                 </div>
               ))}
               {playing && (
-                <button
-                  className="secondary"
-                  onClick={() => goFromPanel('fountain')}
-                >
-                  광장으로 가서 이야기하기 <ArrowRight size={16} />
-                </button>
+                <ConversationPrompt
+                  state={state}
+                  onGo={() => goFromPanel('fountain')}
+                />
               )}
             </div>
           )}
@@ -1687,6 +1685,31 @@ function Stat({
       >
         {Math.round(value)}
       </meter>
+    </div>
+  );
+}
+function ConversationPrompt({
+  state,
+  onGo,
+  compact = false,
+}: {
+  state: GameState;
+  onGo: () => void;
+  compact?: boolean;
+}) {
+  const status = conversationStatus(state);
+  return (
+    <div className="conversation-prompt">
+      <p>{status.message}</p>
+      <small>{status.detail}</small>
+      {status.action && (
+        <button
+          className={compact ? 'text-button' : 'secondary'}
+          onClick={onGo}
+        >
+          {status.action} <ArrowRight size={14} />
+        </button>
+      )}
     </div>
   );
 }

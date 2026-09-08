@@ -917,6 +917,26 @@ kbd {
 .people-list {
   padding-top: 4px;
 }
+.conversation-prompt {
+  padding-top: 14px;
+}
+.conversation-prompt p {
+  font-size: 12px !important;
+  line-height: 1.7 !important;
+  color: #c0d3d2;
+  margin: 0 0 5px !important;
+}
+.conversation-prompt small {
+  display: block;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #9cb4bb;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.conversation-prompt .secondary {
+  margin-top: 12px;
+}
 .person {
   display: flex;
   align-items: center;

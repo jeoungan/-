@@ -18,6 +18,7 @@ import {
   choiceResources,
   relationshipPreview,
   companionSkillReady,
+  conversationStatus,
   pathTo,
   PLACES,
   walkable,
@@ -32,6 +33,72 @@ const actions = (moves, initial = fresh()) =>
     assert.notStrictEqual(n, s);
     return n;
   }, initial);
+test('conversation guidance follows actual remaining dialogue and new companions', () => {
+  assert.equal(conversationStatus(fresh()).kind, 'unmet');
+  const before = actions([
+    ['engineering', 'pull'],
+    ['fountain', 'cell'],
+  ]);
+  assert.equal(conversationStatus(before).remaining, 1);
+  const after = actions([['fountain', 'talk-doha']], before);
+  assert.equal(conversationStatus(after).kind, 'complete');
+  assert.equal(conversationStatus(after).action, null);
+  assert.equal(eventFor(after, 'fountain').choices.length, 0);
+  assert.match(eventFor(after, 'fountain').body, /이야기를 모두 들었다/);
+  const joined = actions([['radio', 'speak']], after);
+  assert.equal(conversationStatus(joined).remaining, 1);
+  assert.equal(conversationStatus(joined).kind, 'available');
+});
+test('conversation guidance includes cache prerequisites and real time boundaries', () => {
+  const recruited = actions([['engineering', 'pull']]);
+  const prepared = actions([['fountain', 'cell']], recruited);
+  for (const [s, seconds, kind, minutes] of [
+    [recruited, 120, 'prepare', 2],
+    [recruited, 119, 'blocked', 2],
+    [prepared, 60, 'available', 1],
+    [prepared, 59, 'blocked', 1],
+  ]) {
+    const status = conversationStatus({ ...s, elapsed: 1800 - seconds });
+    assert.equal(status.kind, kind);
+    assert.equal(status.minutes, minutes);
+    assert.equal(!!status.action, kind !== 'blocked');
+  }
+  const blocked = { ...prepared, elapsed: 1741 };
+  assert.match(
+    choiceDisabled(blocked, eventFor(blocked, 'fountain').choices[0]),
+    /시간 부족/,
+  );
+  assert.deepEqual(placeProgress(blocked, 'fountain'), {
+    kind: 'blocked',
+    label: '대화 시간 부족',
+  });
+});
+test('maximum trust does not consume dialogue and all three completed talks stay complete', () => {
+  const s = {
+    ...fresh(),
+    flags: ['cache'],
+    companions: ['seoyun', 'minjae', 'doha'],
+    trust: { seoyun: 3, minjae: 3, doha: 3 },
+  };
+  Object.freeze(s.flags);
+  Object.freeze(s.companions);
+  Object.freeze(s.trust);
+  Object.freeze(s);
+  const before = structuredClone(s);
+  assert.equal(conversationStatus(s).remaining, 3);
+  assert.deepEqual(s, before);
+  const after = actions(
+    [
+      ['fountain', 'talk-seoyun'],
+      ['fountain', 'talk-minjae'],
+      ['fountain', 'talk-doha'],
+    ],
+    s,
+  );
+  assert.equal(conversationStatus(after).kind, 'complete');
+  assert.match(conversationStatus(after).detail, /기록에서 다시/);
+  assert.equal(conversationStatus(after).action, null);
+});
 test('ending advice points collected evidence toward an unfinished broadcast', () => {
   const gathered = actions([
     ['library', 'power'],

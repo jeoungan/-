@@ -304,7 +304,9 @@ export function eventFor(s: GameState, id: PlaceId): StoryEvent {
           tag: 'CENTRAL SQUARE',
           title: '같이 걷는 사람들',
           body: s.companions.length
-            ? '조금 전까지 낯선 얼굴들이었다. 이제는 멈춰 서면 함께 멈추는 사람들이 있다. 각자 한 번씩, 마음에 걸린 이야기를 들을 수 있다.'
+            ? s.companions.some((person) => !has(s, 'talk-' + person))
+              ? '조금 전까지 낯선 얼굴들이었다. 이제는 멈춰 서면 함께 멈추는 사람들이 있다. 각자 한 번씩, 마음에 걸린 이야기를 들을 수 있다.'
+              : '함께 온 동료들의 이야기를 모두 들었다. 남은 시간 안에 탈출 경로를 준비하고 출발을 확정하자.'
             : '광장의 비상등은 세 방향을 가리킨다. 공학관의 셔틀 부품, 도서관의 수문 도면, 방송실의 구조 안테나. 어느 길로 가든 출발을 확정해야 탈출할 수 있다.',
           choices: s.companions
             .filter((p) => !has(s, 'talk-' + p))
@@ -894,6 +896,72 @@ export function choiceDisabled(s: GameState, c: Choice): string | undefined {
     return `시간 부족 · ${c.minutes}분 필요`;
   return undefined;
 }
+export function conversationStatus(s: GameState): {
+  kind: 'unmet' | 'complete' | 'prepare' | 'available' | 'blocked';
+  remaining: number;
+  minutes: number | null;
+  message: string;
+  detail: string;
+  action: string | null;
+} {
+  if (!s.companions.length)
+    return {
+      kind: 'unmet',
+      remaining: 0,
+      minutes: null,
+      message: '먼저 동료를 만나 보세요.',
+      detail: '동료와 함께 광장에 돌아오면 이야기를 나눌 수 있어요.',
+      action: null,
+    };
+  const prepared = has(s, 'cache');
+  const talks = eventFor(
+    prepared ? s : { ...s, flags: [...s.flags, 'cache'] },
+    'fountain',
+  ).choices;
+  if (!talks.length)
+    return {
+      kind: 'complete',
+      remaining: 0,
+      minutes: null,
+      message: '함께 온 동료와의 광장 대화 완료',
+      detail:
+        s.companions.length === Object.keys(PEOPLE).length
+          ? '세 사람과 나눈 이야기는 기록에서 다시 읽을 수 있어요.'
+          : '새로운 동료를 만나면 그 사람의 이야기도 들을 수 있어요.',
+      action: null,
+    };
+  const talkMinutes = Math.min(...talks.map((choice) => choice.minutes));
+  // Include the prerequisite cache choice before advertising a conversation.
+  const options = prepared
+    ? talks
+    : eventFor(s, 'fountain').choices.map((choice) => ({
+        ...choice,
+        minutes: choice.minutes + talkMinutes,
+      }));
+  const minutes = Math.min(...options.map((choice) => choice.minutes));
+  const detail = prepared
+    ? `대화마다 최소 ${minutes}분 · 이동 시간 별도`
+    : `비상함 조사와 첫 대화에 최소 ${minutes}분 · 이동 시간 별도`;
+  if (!options.some((choice) => !choiceDisabled(s, choice)))
+    return {
+      kind: 'blocked',
+      remaining: talks.length,
+      minutes,
+      message: '대화할 시간이 부족합니다.',
+      detail,
+      action: null,
+    };
+  return {
+    kind: prepared ? 'available' : 'prepare',
+    remaining: talks.length,
+    minutes,
+    message: prepared
+      ? `광장 대화 ${talks.length}명 남음`
+      : '비상함 조사 후 대화할 수 있어요.',
+    detail,
+    action: prepared ? '광장에서 이야기하기' : '광장 비상함 조사하러 가기',
+  };
+}
 export function departureStatus(s: GameState, id: PlaceId) {
   const departures = eventFor(s, id).choices.filter((choice) => choice.route);
   const affordable = departures.filter(
@@ -944,7 +1012,9 @@ export function placeProgress(s: GameState, id: PlaceId) {
   if (departure.canDepart) return { kind: 'ready', label: '출발 가능' };
   if (departure.prepared) return { kind: 'blocked', label: '출발 조건 부족' };
   if (id === 'fountain' && has(s, 'cache') && event.choices.length)
-    return { kind: 'available', label: '대화 가능' };
+    return conversationStatus(s).kind === 'available'
+      ? { kind: 'available', label: '대화 가능' }
+      : { kind: 'blocked', label: '대화 시간 부족' };
   if (!event.choices.length)
     return {
       kind: 'done',
