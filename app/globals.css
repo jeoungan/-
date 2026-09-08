@@ -1450,8 +1450,14 @@ kbd {
   flex-wrap: wrap;
   gap: 9px;
 }
+.story-dialog:has(.inventory) .dialog-heading {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
 .items > div {
   display: grid;
+  flex: 1 1 230px;
+  min-width: 0;
   grid-template-columns: 22px 1fr;
   border: 1px solid #375462;
   border-radius: 5px;
@@ -1468,8 +1474,36 @@ kbd {
   font-weight: 500;
 }
 .items span {
-  font-size: 11px;
-  color: #8eabb6;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #a8c0c7;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.items small {
+  grid-column: 2;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #b2d0be;
+}
+.inventory-evidence {
+  margin-top: 14px;
+  padding: 13px;
+  border-left: 2px solid #789f95;
+  background: #b0d8c808;
+}
+.inventory-evidence strong {
+  font-size: 13px;
+  font-weight: 500;
+  color: #b5d5c9;
+}
+.inventory-evidence p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #a8c0c7;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 .items > p {
   font-size: 14px;

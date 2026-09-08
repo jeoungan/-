@@ -42,6 +42,7 @@ import {
   PLACES,
   PEOPLE,
   ITEM_NAMES,
+  ITEM_GUIDES,
   ENDINGS,
   has,
   evidence,
@@ -1536,21 +1537,39 @@ export default function Home() {
               </h3>
               <div className="items">
                 {state.items.length ? (
-                  state.items.map((item) => (
-                    <div key={item}>
-                      <BookOpen size={18} />
-                      <b>{ITEM_NAMES[item]}</b>
-                      <span>
-                        {['admin', 'medical', 'system'].includes(item)
-                          ? '공개 가능한 증거'
-                          : '탈출 준비 물품'}
-                      </span>
-                    </div>
-                  ))
+                  state.items.map((item) => {
+                    const guide = ITEM_GUIDES[item];
+                    const note =
+                      guide.completed && has(state, guide.completed.flag)
+                        ? guide.completed.text
+                        : guide.note;
+                    return (
+                      <div key={item}>
+                        <BookOpen size={18} />
+                        <b>{ITEM_NAMES[item]}</b>
+                        <span>{guide.description}</span>
+                        {note && <small>{note}</small>}
+                      </div>
+                    );
+                  })
                 ) : (
                   <p>아직 물건이 없습니다. 도서관과 공학관을 살펴보세요.</p>
                 )}
               </div>
+              {evidence(state) > 0 && (
+                <div className="inventory-evidence">
+                  <strong>
+                    {has(state, 'truth')
+                      ? '공개 방송 완료'
+                      : `증거 ${evidence(state)}/3 · ${evidence(state) >= 2 ? '증거 조건 충족' : '서로 다른 증거 2개 필요'}`}
+                  </strong>
+                  <p>
+                    {has(state, 'truth')
+                      ? '공개 방송을 마쳤으며, 확보한 기록은 배낭에 남아 있습니다.'
+                      : '공개 송출은 방송실에서 선택합니다. 송출 방법과 필요한 시간·전력은 현장 선택지에서 확인하세요.'}
+                  </p>
+                </div>
+              )}
               <h3>함께 걷는 사람들</h3>
               {(Object.keys(PEOPLE) as Companion[]).map((id) => (
                 <div className="person" key={id}>

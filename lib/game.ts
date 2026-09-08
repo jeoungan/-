@@ -168,6 +168,29 @@ export const ITEM_NAMES: Record<string, string> = {
   medical: '환자 접수 기록',
   system: '변경된 제어 기록',
 };
+export const ITEM_GUIDES: Record<
+  string,
+  {
+    description: string;
+    note?: string;
+    completed?: { flag: string; text: string };
+  }
+> = {
+  map: {
+    description: '남문 수문 · 우회 손잡이의 위치를 알려 주는 도면',
+    completed: { flag: 'gate-open', text: '남문 수문 개방 완료' },
+  },
+  parts: {
+    description: '셔틀 차고 · 구동 모듈 교체용 부품',
+    note: '부품으로 수리할 때는 전력도 필요합니다.',
+    completed: { flag: 'shuttle-ready', text: '셔틀 수리 완료' },
+  },
+  admin: { description: '방송실 · 경보 보류와 봉쇄 지시를 입증하는 기록' },
+  medical: {
+    description: '방송실 · 공식 경보 이전의 피해 발생을 입증하는 기록',
+  },
+  system: { description: '방송실 · 봉쇄 조건의 변경을 입증하는 기록' },
+};
 export const ENDINGS: Record<
   string,
   { title: string; subtitle: string; body: string; tip: string }
