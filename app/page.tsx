@@ -95,7 +95,7 @@ type GameWindow = Window & {
     resume: () => void;
   };
 };
-export default function Home() {
+export default function Home({ assetBase = '/' }: { assetBase?: string } = {}) {
   const [state, setState] = useState<GameState>(initialState);
   const ref = useRef(state);
   const [panel, setPanel] = useState<Panel>(null);
@@ -880,7 +880,7 @@ export default function Home() {
             className={'world ' + (state.mode === 'title' ? 'title-world' : '')}
           >
             <img
-              src="/campus.png"
+              src={`${assetBase}campus.png`}
               alt="도서관, 의무실, 공학관, 방송실, 남문 수문과 셔틀 차고가 연결된 해무대학교 지도"
               draggable={false}
             />
